@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Просмотр аниме — AniVolume</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <div class="container" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+      <div class="logo">🎬 AniVolume</div>
+      <nav>
+        <a href="index.html">Главная</a>
+        <a href="#" id="adminLink" style="display:none;">Админ-панель</a>
+        <div id="authSection">
+          <a href="#" id="authBtn">Войти</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <div id="animeDetails" class="anime-details">
+      <h1 id="animeTitle">Загрузка...</h1>
+      <div class="meta" id="animeMeta"></div>
+      <p id="animeDescription"></p>
+    </div>
+
+    <div class="video-container">
+      <video id="videoPlayer" controls autoplay>
+        Ваш браузер не поддерживает видео.
+      </video>
+    </div>
+  </main>
+
+  <!-- Модальное окно для входа (аналогично index) -->
+  <div id="loginModal" class="modal">
+    <div class="modal-content">
+      <h2>Вход</h2>
+      <form id="loginForm">
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="loginEmail" required>
+        </div>
+        <div class="form-group">
+          <label>Пароль</label>
+          <input type="password" id="loginPassword" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Войти</button>
+        <button type="button" class="btn btn-secondary" id="closeLoginModal">Отмена</button>
+        <div id="loginError" style="color: #ff6b6b; margin-top: 10px;"></div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module">
+    import { supabase } from './supabase.js'
+    import { getAnimeById, signIn, signOut, getCurrentUser, isAdmin } from './script.js'
+
+    const titleEl = document.getElementById('animeTitle')
+    const metaEl = document.getElementById('animeMeta')
+    const descEl = document.getElementById('animeDescription')
+    const videoPlayer = document.getElementById('videoPlayer')
+    const authBtn = document.getElementById('authBtn')
+    const adminLink = document.getElementById('adminLink')
+    const loginModal = document.getElementById('loginModal')
+    const loginForm = document.getElementById('loginForm')
+    const loginEmail = document.getElementById('loginEmail')
+    const loginPassword = document.getElementById('loginPassword')
+    const loginError = document.getElementById('loginError')
+    const closeLoginModal = document.getElementById('closeLoginModal')
+
+    // Получаем id из URL
+    const urlParams = new URLSearchParams(window.location.search)
+    const animeId = urlParams.get('id')
+
+    async function loadAnime() {
+      if (!animeId) {
+        titleEl.textContent = 'Не указан ID аниме'
+        return
+      }
+      try {
+        const anime = await getAnimeById(animeId)
+        titleEl.textContent = anime.title
+        metaEl.textContent = `${anime.genre || 'Без жанра'} • ${anime.release_year || ''}`
+        descEl.textContent = anime.description || ''
+        videoPlayer.src = anime.video_url || ''
+        // Если видео нет, показать сообщение
+        if (!anime.video_url) {
+          videoPlayer.innerHTML = '<p style="color:#fff; text-align:center; padding:50px;">Видео недоступно</p>'
+        }
+      } catch (err) {
+        console.error(err)
+        titleEl.textContent = 'Ошибка загрузки аниме'
+      }
+    }
+
+    // Авторизация (копируем логику из index, можно вынести в отдельный модуль)
+    async function updateAuthUI() {
+      const user = await getCurrentUser()
+      if (user) {
+        authBtn.textContent = 'Выйти'
+        authBtn.href = '#'
+        const admin = await isAdmin()
+        if (admin) {
+          adminLink.style.display = 'inline'
+          adminLink.href = 'admin.html'
+        } else {
+          adminLink.style.display = 'none'
+        }
+      } else {
+        authBtn.textContent = 'Войти'
+        authBtn.href = '#'
+        adminLink.style.display = 'none'
+      }
+    }
+
+    authBtn.addEventListener('click', (e) => {
+      e.preventDefault()
+      const user = getCurrentUser()
+      if (user) {
+        signOut().then(() => {
+          updateAuthUI()
+          // Не перезагружаем страницу, просто обновляем UI
+        }).catch(console.error)
+      } else {
+        loginModal.classList.add('active')
+      }
+    })
+
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault()
+      loginError.textContent = ''
+      try {
+        await signIn(loginEmail.value, loginPassword.value)
+        loginModal.classList.remove('active')
+        loginForm.reset()
+        updateAuthUI()
+      } catch (err) {
+        loginError.textContent = err.message || 'Ошибка входа'
+      }
+    })
+
+    closeLoginModal.addEventListener('click', () => {
+      loginModal.classList.remove('active')
+      loginError.textContent = ''
+    })
+
+    // Запуск
+    loadAnime()
+    updateAuthUI()
+  </script>
+</body>
+</html>
