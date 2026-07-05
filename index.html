@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AniVolume — смотри аниме</title>
+    <link rel="stylesheet" href="css/style.css">
+    <!-- Supabase JS SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <header>
+        <div class="logo">AniVolume</div>
+        <nav>
+            <a href="#home" id="nav-home">Главная</a>
+            <a href="#admin" id="nav-admin" style="display:none;">Админка</a>
+            <a href="#" id="nav-login">Войти</a>
+            <a href="#" id="nav-logout" style="display:none;">Выйти</a>
+        </nav>
+    </header>
+
+    <main id="app"></main>
+
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>
