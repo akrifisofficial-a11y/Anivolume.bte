@@ -1,26 +1,163 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AniVolume — смотри аниме</title>
-    <link rel="stylesheet" href="css/style.css">
-    <!-- Supabase JS SDK -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AniVolume — Аниме онлайн</title>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <header>
-        <div class="logo">AniVolume</div>
-        <nav>
-            <a href="#home" id="nav-home">Главная</a>
-            <a href="#admin" id="nav-admin" style="display:none;">Админка</a>
-            <a href="#" id="nav-login">Войти</a>
-            <a href="#" id="nav-logout" style="display:none;">Выйти</a>
-        </nav>
-    </header>
+  <header>
+    <div class="container" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+      <div class="logo">🎬 AniVolume</div>
+      <nav>
+        <a href="index.html">Главная</a>
+        <a href="#" id="adminLink" style="display:none;">Админ-панель</a>
+        <div class="search-form">
+          <input type="text" id="searchInput" placeholder="Поиск аниме...">
+          <button id="searchBtn">Найти</button>
+        </div>
+        <div id="authSection">
+          <a href="#" id="authBtn">Войти</a>
+        </div>
+      </nav>
+    </div>
+  </header>
 
-    <main id="app"></main>
+  <main class="container">
+    <h1 style="margin: 30px 0 10px;">Популярные аниме</h1>
+    <div id="animeGrid" class="anime-grid"></div>
+  </main>
 
-    <script type="module" src="js/app.js"></script>
+  <!-- Модальное окно для входа -->
+  <div id="loginModal" class="modal">
+    <div class="modal-content">
+      <h2>Вход</h2>
+      <form id="loginForm">
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="loginEmail" required>
+        </div>
+        <div class="form-group">
+          <label>Пароль</label>
+          <input type="password" id="loginPassword" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Войти</button>
+        <button type="button" class="btn btn-secondary" id="closeLoginModal">Отмена</button>
+        <div id="loginError" style="color: #ff6b6b; margin-top: 10px;"></div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module">
+    import { supabase } from './supabase.js'
+    import { getAnimeList, searchAnime, signIn, signOut, getCurrentUser, isAdmin } from './script.js'
+
+    const grid = document.getElementById('animeGrid')
+    const searchInput = document.getElementById('searchInput')
+    const searchBtn = document.getElementById('searchBtn')
+    const authBtn = document.getElementById('authBtn')
+    const loginModal = document.getElementById('loginModal')
+    const loginForm = document.getElementById('loginForm')
+    const loginEmail = document.getElementById('loginEmail')
+    const loginPassword = document.getElementById('loginPassword')
+    const loginError = document.getElementById('loginError')
+    const closeLoginModal = document.getElementById('closeLoginModal')
+    const adminLink = document.getElementById('adminLink')
+
+    // Загрузка аниме
+    async function loadAnime(query = '') {
+      try {
+        const data = query ? await searchAnime(query) : await getAnimeList()
+        renderAnime(data)
+      } catch (err) {
+        console.error(err)
+        grid.innerHTML = '<p>Ошибка загрузки аниме</p>'
+      }
+    }
+
+    function renderAnime(animeList) {
+      if (!animeList.length) {
+        grid.innerHTML = '<p>Ничего не найдено</p>'
+        return
+      }
+      grid.innerHTML = animeList.map(anime => `
+        <div class="anime-card" onclick="window.location.href='watch.html?id=${anime.id}'">
+          <img src="${anime.cover_image || 'https://via.placeholder.com/200x260?text=No+Image'}" alt="${anime.title}">
+          <div class="info">
+            <h3>${anime.title}</h3>
+            <p>${anime.genre || 'Без жанра'} • ${anime.release_year || ''}</p>
+          </div>
+        </div>
+      `).join('')
+    }
+
+    // Поиск
+    searchBtn.addEventListener('click', () => {
+      const query = searchInput.value.trim()
+      loadAnime(query)
+    })
+    searchInput.addEventListener('keyup', (e) => {
+      if (e.key === 'Enter') searchBtn.click()
+    })
+
+    // Авторизация
+    async function updateAuthUI() {
+      const user = await getCurrentUser()
+      if (user) {
+        authBtn.textContent = 'Выйти'
+        authBtn.href = '#'
+        // Проверка админа
+        const admin = await isAdmin()
+        if (admin) {
+          adminLink.style.display = 'inline'
+          adminLink.href = 'admin.html'
+        } else {
+          adminLink.style.display = 'none'
+        }
+      } else {
+        authBtn.textContent = 'Войти'
+        authBtn.href = '#'
+        adminLink.style.display = 'none'
+      }
+    }
+
+    authBtn.addEventListener('click', (e) => {
+      e.preventDefault()
+      const user = getCurrentUser()
+      if (user) {
+        // Выход
+        signOut().then(() => {
+          updateAuthUI()
+          loadAnime()
+        }).catch(console.error)
+      } else {
+        loginModal.classList.add('active')
+      }
+    })
+
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault()
+      loginError.textContent = ''
+      try {
+        await signIn(loginEmail.value, loginPassword.value)
+        loginModal.classList.remove('active')
+        loginForm.reset()
+        updateAuthUI()
+        loadAnime()
+      } catch (err) {
+        loginError.textContent = err.message || 'Ошибка входа'
+      }
+    })
+
+    closeLoginModal.addEventListener('click', () => {
+      loginModal.classList.remove('active')
+      loginError.textContent = ''
+    })
+
+    // Инициализация
+    loadAnime()
+    updateAuthUI()
+  </script>
 </body>
-</html>
+    </html>
