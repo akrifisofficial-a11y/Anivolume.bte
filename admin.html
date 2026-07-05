@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Админ-панель — AniVolume</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <div class="container" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+      <div class="logo">🎬 AniVolume</div>
+      <nav>
+        <a href="index.html">Главная</a>
+        <a href="admin.html" style="color:#ff6b6b;">Админ-панель</a>
+        <div id="authSection">
+          <a href="#" id="authBtn">Выйти</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <h1 style="margin: 30px 0 10px;">Управление аниме</h1>
+
+    <div class="admin-panel">
+      <div class="actions">
+        <button class="btn btn-primary" id="addBtn">➕ Добавить аниме</button>
+        <button class="btn btn-secondary" id="refreshBtn">🔄 Обновить</button>
+      </div>
+
+      <div style="overflow-x: auto;">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Название</th>
+              <th>Жанр</th>
+              <th>Год</th>
+              <th>Действия</th>
+            </tr>
+          </thead>
+          <tbody id="animeTableBody">
+            <tr><td colspan="4">Загрузка...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <!-- Модальное окно для добавления/редактирования -->
+  <div id="editModal" class="modal">
+    <div class="modal-content">
+      <h2 id="modalTitle">Добавить аниме</h2>
+      <form id="editForm">
+        <input type="hidden" id="editId">
+        <div class="form-group">
+          <label>Название *</label>
+          <input type="text" id="editTitle" required>
+        </div>
+        <div class="form-group">
+          <label>Описание</label>
+          <textarea id="editDescription"></textarea>
+        </div>
+        <div class="form-group">
+          <label>URL обложки</label>
+          <input type="url" id="editCover" placeholder="https://example.com/image.jpg">
+        </div>
+        <div class="form-group">
+          <label>URL видео *</label>
+          <input type="url" id="editVideo" required>
+        </div>
+        <div class="form-group">
+          <label>Жанр</label>
+          <input type="text" id="editGenre" placeholder="Например: Приключения, Комедия">
+        </div>
+        <div class="form-group">
+          <label>Год выпуска</label>
+          <input type="number" id="editYear" min="1900" max="2099">
+        </div>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+          <button type="submit" class="btn btn-primary">Сохранить</button>
+          <button type="button" class="btn btn-secondary" id="closeEditModal">Отмена</button>
+        </div>
+        <div id="editError" style="color: #ff6b6b; margin-top: 10px;"></div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module">
+    import { getAnimeList, createAnime, updateAnime, deleteAnime, signOut, getCurrentUser, isAdmin } from './script.js'
+
+    const tbody = document.getElementById('animeTableBody')
+    const addBtn = document.getElementById('addBtn')
+    const refreshBtn = document.getElementById('refreshBtn')
+    const authBtn = document.getElementById('authBtn')
+    const editModal = document.getElementById('editModal')
+    const editForm = document.getElementById('editForm')
+    const editId = document.getElementById('editId')
+    const editTitle = document.getElementById('editTitle')
+    const editDescription = document.getElementById('editDescription')
+    const editCover = document.getElementById('editCover')
+    const editVideo = document.getElementById('editVideo')
+    const editGenre = document.getElementById('editGenre')
+    const editYear = document.getElementById('editYear')
+    const modalTitle = document.getElementById('modalTitle')
+    const closeEditModal = document.getElementById('closeEditModal')
+    const editError = document.getElementById('editError')
+
+    let currentAnimeList = []
+
+    // Загрузка списка
+    async function loadAnime() {
+      try {
+        const data = await getAnimeList()
+        currentAnimeList = data
+        renderTable(data)
+      } catch (err) {
+        console.error(err)
+        tbody.innerHTML = '<tr><td colspan="4">Ошибка загрузки</td></tr>'
+      }
+    }
+
+    function renderTable(animeList) {
+      if (!animeList.length) {
+        tbody.innerHTML = '<tr><td colspan="4">Нет аниме</td></tr>'
+        return
+      }
+      tbody.innerHTML = animeList.map(anime => `
+        <tr>
+          <td>${anime.title}</td>
+          <td>${anime.genre || '-'}</td>
+          <td>${anime.release_year || '-'}</td>
+          <td class="actions-cell">
+            <button class="btn btn-secondary" data-id="${anime.id}" data-action="edit">✏️</button>
+            <button class="btn btn-danger" data-id="${anime.id}" data-action="delete">🗑️</button>
+          </td>
+        </tr>
+      `).join('')
+
+      // Обработчики для кнопок
+      tbody.querySelectorAll('[data-action="edit"]').forEach(btn => {
+        btn.addEventListener('click', () => openEditModal(btn.dataset.id))
+      })
+      tbody.querySelectorAll('[data-action="delete"]').forEach(btn => {
+        btn.addEventListener('click', () => deleteItem(btn.dataset.id))
+      })
+    }
+
+    // Открытие модалки для редактирования
+    function openEditModal(id = null) {
+      editError.textContent = ''
+      if (id) {
+        // Редактирование
+        const anime = currentAnimeList.find(a => a.id === id)
+        if (!anime) return
+        modalTitle.textContent = 'Редактировать аниме'
+        editId.value = anime.id
+        editTitle.value = anime.title
+        editDescription.value = anime.description || ''
+        editCover.value = anime.cover_image || ''
+        editVideo.value = anime.video_url || ''
+        editGenre.value = anime.genre || ''
+        editYear.value = anime.release_year || ''
+      } else {
+        // Добавление
+        modalTitle.textContent = 'Добавить аниме'
+        editId.value = ''
+        editForm.reset()
+      }
+      editModal.classList.add('active')
+    }
+
+    // Сохранение (добавление или обновление)
+    editForm.addEventListener('submit', async (e) => {
+      e.preventDefault()
+      editError.textContent = ''
+      const id = editId.value
+      const data = {
+        title: editTitle.value.trim(),
+        description: editDescription.value.trim(),
+        cover_image: editCover.value.trim(),
+        video_url: editVideo.value.trim(),
+        genre: editGenre.value.trim(),
+        release_year: parseInt(editYear.value) || null
+      }
+
+      try {
+        if (id) {
+          await updateAnime(id, data)
+        } else {
+          await createAnime(data)
+        }
+        editModal.classList.remove('active')
+        loadAnime()
+      } catch (err) {
+        editError.textContent = err.message || 'Ошибка сохранения'
+      }
+    })
+
+    // Удаление
+    async function deleteItem(id) {
+      if (!confirm('Вы уверены, что хотите удалить это аниме?')) return
+      try {
+        await deleteAnime(id)
+        loadAnime()
+      } catch (err) {
+        alert('Ошибка удаления: ' + err.message)
+      }
+    }
+
+    // Закрытие модалки
+    closeEditModal.addEventListener('click', () => {
+      editModal.classList.remove('active')
+      editError.textContent = ''
+    })
+
+    // Кнопки
+    addBtn.addEventListener('click', () => openEditModal())
+    refreshBtn.addEventListener('click', loadAnime)
+
+    // Выход
+    authBtn.addEventListener('click', async (e) => {
+      e.preventDefault()
+      await signOut()
+      window.location.href = 'index.html'
+    })
+
+    // Проверка прав доступа (если не админ - редирект)
+    async function checkAdmin() {
+      const admin = await isAdmin()
+      if (!admin) {
+        alert('Доступ запрещён. Вы не администратор.')
+        window.location.href = 'index.html'
+      }
+    }
+
+    // Инициализация
+    checkAdmin().then(() => loadAnime())
+  </script>
+</body>
+            </html>
